@@ -133,6 +133,10 @@ class Sierra
 	public function getBibRecord($id)
 	{
 		// bib record query
+		/* found leader information in the control_field:
+		control_field.p40,p41,p42 seem to be the o5 (record status code) 06 (record_type/format code) and 07 (bib_level_code)
+		
+		*/
 		
 		$sql = trim("
 			SELECT
@@ -146,6 +150,9 @@ class Sierra
 				varfield_view.marc_ind2,
 				varfield_view.field_content,
 				varfield_view.varfield_type_code,
+				control_field.p40,
+				control_field.p41,
+				control_field.p42,
 				leader_field.*
 			FROM
 				sierra_view.bib_view
@@ -153,8 +160,10 @@ class Sierra
 				sierra_view.varfield_view ON bib_view.id = varfield_view.record_id
 			LEFT JOIN
 				sierra_view.leader_field ON bib_view.id = leader_field.record_id
+			LEFT JOIN
+				sierra_view.control_field ON bib_view.id = control_field.record_id	
 			WHERE
-				bib_view.record_num = '$id'
+				bib_view.record_num = '$id' and control_field.control_num=8
 			ORDER BY 
 				marc_tag
 		");
@@ -186,14 +195,26 @@ class Sierra
 		// 0000's here get converted to correct lengths by File_MARC
 		
 		$leader = '00000'; // 00-04 - Record length
-		$leader .= $this->getLeaderValue($result,'record_status_code'); // 05 - Record status
-		$leader .= $this->getLeaderValue($result,'record_type_code'); // 06 - Type of record
-		$leader .= $this->getLeaderValue($result,'bib_level_code'); // 07 - Bibliographic level
+		
+		/* we have to determine what to do in the cases that we get no leader information back from the database */
+		
+		if ($this->getLeaderValue($result,'record_status_code') == ' ') $leader .= $this->getLeaderValue($result,'p40'); // 05 - Record status
+		else $leader .= $this->getLeaderValue($result,'record_status_code');
+		//we can get the following field from the bcode1 field
+		if ($this->getLeaderValue($result,'record_type_code') == ' ') $leader .= $this->getLeaderValue($result,'bcode1');
+		else $leader .= $this->getLeaderValue($result,'record_type_code'); // 06 - Type of record
+		
+		//we can get the following field from the bcode2 field
+		if ($this->getLeaderValue($result,'bib_level_code')==' ') $leader .= $this->getLeaderValue($result,'bcode2');
+		else $leader .= $this->getLeaderValue($result,'bib_level_code'); // 07 - Bibliographic level
+		
 		$leader .= $this->getLeaderValue($result,'control_type_code'); // 08 - Type of control
 		$leader .= $this->getLeaderValue($result,'char_encoding_scheme_code'); // 09 - Character coding scheme
 		$leader .= '2'; // 10 - Indicator count
 		$leader .= '2'; // 11 - Subfield code count
 		$leader .= '00000'; // 12-16 - Base address of data
+		
+		//found the next one in p43 of control_field
 		$leader .= $this->getLeaderValue($result,'encoding_level_code'); // 17 - Encoding level
 		$leader .= $this->getLeaderValue($result,'descriptive_cat_form_code'); // 18 - Descriptive cataloging form
 		$leader .= $this->getLeaderValue($result,'multipart_level_code'); // 19 - Multipart resource record level
@@ -378,7 +399,7 @@ class Sierra
 				
 				// deleted record
 			
-				if ( $result['deletion_date_gmt'] != '' )
+				if ( !empty($result['deletion_date_gmt']))
 				{
 					$marc_record = $this->createDeletedRecord($id);
 				}
@@ -434,7 +455,7 @@ class Sierra
 		
 		// bib id field
 		
-		$bib_field = new File_MARC_Data_Field('907');
+		$bib_field = new File_MARC_Data_Field('035');
 		$record->appendField($bib_field);
 		$bib_field->appendSubfield(new File_MARC_Subfield('a', $this->getFullRecordId($id)));
 		
