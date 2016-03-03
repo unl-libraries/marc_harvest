@@ -728,7 +728,7 @@ class Sierra
 				varfield_view.marc_tag,
 				varfield_view.marc_ind1,
 				varfield_view.marc_ind2,
-				varfield_view.field_content,
+				TRIM(varfield_view.field_content),
 				varfield_view.varfield_type_code,
 				control_field.p40,
 				control_field.p41,
