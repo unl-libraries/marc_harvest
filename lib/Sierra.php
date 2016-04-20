@@ -165,9 +165,9 @@ class Sierra
 			LEFT JOIN
 				sierra_view.leader_field ON bib_view.id = leader_field.record_id
 			LEFT JOIN
-				sierra_view.control_field ON bib_view.id = control_field.record_id	
+				sierra_view.control_field ON bib_view.id = control_field.record_id and control_field.control_num=8
 			WHERE
-				bib_view.record_num = '$id' and control_field.control_num=8
+				bib_view.record_num = '$id' 
 			ORDER BY 
 				marc_tag
 		");
@@ -179,6 +179,7 @@ class Sierra
 			return null;
 		}
 		
+	
 		// let's parse a few things, shall we
 		
 		$result = $results[0];
@@ -190,6 +191,12 @@ class Sierra
 			$record = $this->createDeletedRecord($id);
 			return $record;
 		} 
+		
+		//check for records to ignore we couldn't filter out before
+		// call numbers that start with x are reserve items
+		foreach ($results as $row){
+			if ($row['varfield_type_code'] == 'c' && preg_match('/^x.*/',$row['field_content'])) return null;
+		}
 		
 		//start the marc record
 		$record = new File_MARC_Record();
@@ -244,6 +251,7 @@ class Sierra
 		$bib_field->appendSubfield(new File_MARC_Subfield('d', trim($result['bcode1'])));
 		$bib_field->appendSubfield(new File_MARC_Subfield('e', trim($result['bcode2'])));
 		$bib_field->appendSubfield(new File_MARC_Subfield('f', trim($result['bcode3'])));
+		//$bib_field->appendSubfield(new File_MARC_Subfield('l', trim($result['location'])));
 		
 		// marc fields
 		
@@ -304,12 +312,16 @@ class Sierra
 		// location codes - leaving that in to use 
 		
 		$sql = trim("
-			SELECT location_code
+			SELECT location_code, location_name.name as location_name
 			FROM
 				sierra_view.bib_record_location
+			LEFT JOIN 
+				sierra_view.location ON bib_record_location.location_code=location.code
+			LEFT JOIN
+				sierra_view.location_name ON location.id=location_name.location_id
 			WHERE
 				bib_record_id = '$internal_id'
-		");
+		");		
 		
 		$results = $this->getResults($sql);
 		
@@ -320,6 +332,7 @@ class Sierra
 			foreach ( $results as $result )
 			{
 				$location_record->appendSubfield(new File_MARC_Subfield('b', trim((string)$result['location_code'])));
+				if (trim($result['location_name']) != '') $location_record->appendSubfield(new File_MARC_Subfield('l', trim((string)$result['location_name'])));
 			}
 			
 			$record->appendField($location_record);
@@ -357,7 +370,7 @@ class Sierra
 	 *
 	 * @param string $location  path to file to create
 	 * @param string $name      name of file to create
-	 * @param string $record_type	type of records: bib, authority, item or eresource
+	 * @param string $record_type	type of records: bib, authority
 	 * @param array $results    id query
 	 * @param bool $split       [optional] whether split the file into 50,000-record smaller files (default false)
 	 * 
@@ -412,7 +425,7 @@ class Sierra
 				{
 					if ($record_type=='bib') $marc_record = $this->getBibRecord($id);
 					elseif ($record_type=='authority') $marc_record = $this->getAuthorityRecord($id);
-					elseif ($record_type=='eresource') $marc_record = $this->getResourceRecord($id);
+					
 				}
 				
 				if ( $marc_record != null )
@@ -461,24 +474,18 @@ class Sierra
 		$control_field = new File_MARC_Control_Field('001', "$id");
 		$record->appendField($control_field);
 		
+		$record_field = new File_MARC_Data_Field('035');
+		$record->appendField($record_field);
+		$record_field->appendSubfield(new File_MARC_Subfield('a', $this->getFullRecordId($id)));
 		
-		// the matching field here if needed
-		if ($record_type=='bib'){
-			$bib_field = new File_MARC_Data_Field('035');
-			$record->appendField($bib_field);
-			$bib_field->appendSubfield(new File_MARC_Subfield('a', $this->getFullRecordId($id)));		
-			
-			// find field to use to mark for deletion		
+		// find field to use to mark for deletion
+		if ($record_type=='bib'){								
 			$new_field = new File_MARC_Data_Field('998');
 		}
-		elseif ($record_type='authority'){
-			$record_field = new File_MARC_Data_Field('035');
-			$record->appendField($record_field);
-			$record_field->appendSubfield(new File_MARC_Subfield('a', $this->getFullRecordId($id)));
-			
+		elseif ($record_type='authority'){			
 			$new_field = new File_MARC_Data_Field('010');
 		}
-
+		
 		$record->appendField($new_field);
 		$new_field->appendSubfield(new File_MARC_Subfield('f', 'd'));
 
@@ -549,7 +556,7 @@ class Sierra
 		if ($record_type=='bib') $join_table = "bib_record";
 		elseif ($record_type=='authority') $join_table = "authority_record";
 		elseif ($record_type=='item') $join_table = "item_record";
-		elseif ($record_type=='eresource') $join_table = "resource_record";
+		
 		
 		$record_type_code = substr($record_type,0,1);
 		
@@ -716,7 +723,7 @@ class Sierra
 		}
 	}
 	
-	/** Additional functions added by srickel1 to facitilate export of Authority and Eresource records **/
+	/** Additional functions added by srickel1 to facitilate export of Authority records **/
 	public function getAuthorityRecord($id)
 	{
 		// authority record query	
@@ -866,4 +873,6 @@ class Sierra
 	
 		return $record;
 	}
+	
+
 }
