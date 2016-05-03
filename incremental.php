@@ -24,7 +24,7 @@ if ( !$timestamp || $timestamp==''){
 	//full load
 	echo "Running full export of marc files as no date specified\n";
 	$new_timestamp = time();
-	
+	//removed the old include_options array from export functions.  No need to supply the record type here, as the default is 'bib'
 	$results = $sierra->exportRecords($location);	
 	
 }
@@ -33,6 +33,7 @@ else{
 	//convert to timestamp 
 	$contimestamp = strtotime($timestamp);
 	echo "Converted timestamp from $timestamp to $contimestamp which is ".date("Y-m-d\TH:i",$contimestamp)."\n";
+	//removed the old include_options array from export functions. No need to supply the record type here, as the default is 'bib'
 	$results = $sierra->exportRecordsModifiedAfter($contimestamp, $location);	
 	$new_timestamp = time();	
 }
