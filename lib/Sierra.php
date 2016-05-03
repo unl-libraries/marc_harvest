@@ -180,11 +180,26 @@ class Sierra
 		}
 		
 	
-		// let's parse a few things, shall we
 		
 		$result = $results[0];
 		
 		$internal_id = $result[0]; // internal postgres id
+		
+		//check for erm using the internal id
+		
+		$erm_sql = trim("
+				SELECT 
+					holding_record_erm_holding.* 
+				FROM 
+					sierra_view.bib_record_holding_record_link 
+				LEFT JOIN 
+					sierra_view.holding_record_erm_holding ON holding_record_erm_holding.holding_record_id=bib_record_holding_record_link.holding_record_id
+				WHERE 
+					bib_record_holding_record_link.bib_record_id=$internal_id and marc_tag='856'
+			");
+		$erm_results = $this->getResults($erm_sql);
+		if (count($erm_results) > 0) $results = array_merge($results,$erm_results);
+		// let's parse a few things, shall we
 		
 		if ($result['bcode3'] == 'n'){
 			//suppressed item - let's delete it from the discovery tool data.
@@ -195,7 +210,7 @@ class Sierra
 		//check for records to ignore we couldn't filter out before
 		// call numbers that start with x are reserve items
 		foreach ($results as $row){
-			if ($row['varfield_type_code'] == 'c' && preg_match('/^x.*/',$row['field_content'])) return null;
+			if (!empty($row['varfield_type_code']) && ($row['varfield_type_code'] == 'c' && preg_match('/^x.*/',$row['field_content']))) return null;
 		}
 		
 		//start the marc record
