@@ -25,7 +25,7 @@ if ( !$timestamp || $timestamp==''){
 	echo "Running full export of marc files as no date specified\n";
 	$new_timestamp = time();
 	
-	$results = $sierra->exportRecords($location,false);	
+	$results = $sierra->exportRecords($location);	
 	
 }
 else{
@@ -33,7 +33,7 @@ else{
 	//convert to timestamp 
 	$contimestamp = strtotime($timestamp);
 	echo "Converted timestamp from $timestamp to $contimestamp which is ".date("Y-m-d\TH:i",$contimestamp)."\n";
-	$results = $sierra->exportRecordsModifiedAfter($contimestamp, $location,false);	
+	$results = $sierra->exportRecordsModifiedAfter($contimestamp, $location);	
 	$new_timestamp = time();	
 }
 //we should only update the timestamp if the load was successful
