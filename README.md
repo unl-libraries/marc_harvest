@@ -7,10 +7,9 @@ Newly added in June 2016 - the ability to output XML files instead of MARC for t
 To use this feature make a call to export records such as 
 
 `$sierra = new Sierra($sierra_info['host'], $sierra_info['user'], $sierra_info['password']);
-
 `$sierra->exportRecords($location,'eresource','xml');	
 
-where $location is a writeable path for the exported files, and the second option is the type of record (typicall 'bib' or 'authority', and now 'eresource')
+Where $location is a writeable path for the exported files, and the second option is the type of record (typicall 'bib' or 'authority', and now 'eresource')
 
 You can then use some further stylesheet transformations to turn them into add documents for solr, or use elsewhere.
 
