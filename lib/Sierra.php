@@ -73,10 +73,10 @@ class Sierra
 	 * @param int $timestamp    unix timestamp
 	 * @param string $location  path to file to create
 	 * @param string $record_type string indicating type of record retrieving (added element)
-	 * @param array $include_options was removed
+	 * @param string $output_format format of output - marc or xml 
 	 */
 	
-	public function exportRecordsModifiedAfter($timestamp, $location, $record_type='bib')
+	public function exportRecordsModifiedAfter($timestamp, $location, $record_type='bib',$output_format='marc')
 	{
 		$date = gmdate("Y-m-d H:i:s", $timestamp);
 		
@@ -85,8 +85,8 @@ class Sierra
 		$results = $this->getModifiedRecordData($date,$record_type);
 		
 		// make 'em
-		
-		$this->createRecords($location, $record_type.'_modified'.gmdate("Y-m-d",$timestamp), $results,true);
+		if ($output_format=='xml') $this->createXMLRecords($location, $record_type.'_modified'.gmdate("Y-m-d",$timestamp), $results, true);
+		else $this->createRecords($location, $record_type.'_modified'.gmdate("Y-m-d",$timestamp), $results,true);
 	}
 
 	/**
@@ -95,9 +95,10 @@ class Sierra
 	 * @param int $timestamp    unix timestamp
 	 * @param string $location  path to file to create
 	 * @param string $record_type type of record to retrieve information for
+	 * @param string $output_format format of output - marc or xml 
 	 */
 	
-	public function exportRecordsDeletedAfter($timestamp, $location,$record_type='bib')
+	public function exportRecordsDeletedAfter($timestamp, $location,$record_type='bib',$output_format='marc')
 	{
 		$date = gmdate("Y-m-d H:i:s", $timestamp);
 	
@@ -107,7 +108,8 @@ class Sierra
 	
 		// make 'em
 	
-		$this->createRecords($location, $record_type.'_deleted'.gmdate("Y-m-d",$timestamp), $results, true);
+		if ($output_format =='xml') $this->createXMLRecords($location, $record_type.'_deleted'.gmdate("Y-m-d",$timestamp), $results, true);
+		else $this->createRecords($location, $record_type.'_deleted'.gmdate("Y-m-d",$timestamp), $results, true);
 	}	
 	
 	/**
@@ -115,18 +117,22 @@ class Sierra
 	 * 
 	 * @param string $location  path to file to create
 	 * @param string $record_type type of record to retrieve
-	 * @param array $include_options array of values of records to include.  'deleted','suppressed' are options - (removed March 2016)
+	 * @param string $output_format format of output - marc or xml 
+	 * 
 	 */
 	
-	public function exportRecords($location,$record_type='bib')
+	public function exportRecords($location,$record_type='bib',$output_format='marc')
 	{
 		// get all record id's
-		
+		echo "Retrieving all record data for $record_type\n";
 		$results = $this->getAllRecordData($record_type);
 		
 		// make 'em
+		echo "Retrieved ".count($results)." records\n";
+		echo "Creating records...\n";
+		if ($output_format =='xml') $this->createXMLRecords($location, 'full_'.$record_type, $record_type,$results,true);
+		else $this->createRecords($location, 'full_'.$record_type, $record_type,$results,true);
 		
-		$this->createRecords($location, 'full_'.$record_type, $record_type,$results,true);
 	}
 	
 	/**
@@ -236,7 +242,7 @@ class Sierra
 		
 		$leader .= $this->getLeaderValue($result,'control_type_code'); // 08 - Type of control
 		$leader .= $this->getLeaderValue($result,'char_encoding_scheme_code'); // 09 - Character coding scheme
-		$leader .= '2'; // 10 - Indicator count
+		$leader .= '2'; // 10 - Indicator count 
 		$leader .= '2'; // 11 - Subfield code count
 		$leader .= '00000'; // 12-16 - Base address of data
 		
@@ -439,14 +445,15 @@ class Sierra
 				else // active record
 				{
 					if ($record_type=='bib') $marc_record = $this->getBibRecord($id);
-					elseif ($record_type=='authority') $marc_record = $this->getAuthorityRecord($id);
-					
+					elseif ($record_type=='authority') $marc_record = $this->getAuthorityRecord($id);					
+											
 				}
 				
 				if ( $marc_record != null )
 				{
 					fwrite($marc21_file, $marc_record->toRaw());
 				}
+				
 			
 				$this->log("Fetched $record_type record '$id' (" . number_format($y) . " of " . number_format($this->total) . ")\n");
 				$y++;
@@ -469,6 +476,106 @@ class Sierra
 		if ( $split === false )
 		{
 			fclose($marc21_file);
+		}
+	}
+	
+	/**
+	 * Create XML records from a set of record id's
+	 * Added to facilitate create of other catalog records that do not have standard MARC
+	 * 
+	 * @param string $location  path to file to create
+	 * @param string $name      name of file to create
+	 * @param string $record_type	type of records: bib, authority
+	 * @param array $results    id query
+	 * @param bool $split       [optional] whether split the file into 50,000-record smaller files (default false)
+	 *
+	 */
+	
+	public function createXMLRecords($location, $name, $record_type='eresource',$results, $split = false)
+	{
+		if (! is_dir($location) )
+		{
+			throw new Exception("location must be a valid directory, you supplied '$location'");
+		}
+	
+		$this->total = count($results);
+	
+		// split them into chunks of 100k - nope larger - 200k I think
+	
+		$chunks = array_chunk($results, 100000);
+		$x = 1; // file number
+		$y = 1; // number of records's processed
+	
+		// file to write to
+	
+		if ( $split === false )
+		{
+			//start the XML file as that's what we are doing here
+			$xml_doc = new DomDocument('1.0', 'UTF-8');
+			$xml_doc->formatOutput=true;
+			$xml_file = "$location/$name.xml";
+			$records = $xml_doc->createElement("records");
+			$xml_doc->appendChild($records);
+		}
+	
+		foreach ( $chunks as $chunk )
+		{
+			// file to write to (if broken into chunks)
+				
+			if ( $split === true )
+			{
+			
+				$xml_file = "$location/$name-$x.xml";
+				$xml_doc = new DomDocument('1.0','UTF-8');
+				$xml_doc->formatOutput = true;
+				$xml_doc->createElement('records');
+				$records = $xml_doc->createElement("records");
+				$xml_doc->appendChild($records);
+		
+			}
+				
+			// create each marc record based on the id
+				
+			foreach ( $chunk as $result )
+			{
+				$marc_record = null;
+					
+				$id = $result['record_num'];
+	
+				// deleted record
+					
+				if ( !empty($result['deletion_date_gmt']))
+				{
+					$marc_record = $this->createDeletedRecord($id,$record_type);
+				}
+				else // active record
+				{
+					if ($record_type=='eresource') 	$xml_doc = $this->getEresourceRecord($xml_doc,$records,$id);
+					else return null;
+						
+				}
+					
+				$this->log("Fetched $record_type record '$id' (" . number_format($y) . " of " . number_format($this->total) . ")\n");
+				$y++;
+			}
+				
+			if ( $split === true )
+			{
+				$xml_doc->save($xml_file);				
+			}
+	
+			$x++;
+				
+			// blank this so PDO will create a new connection
+			// otherwise after about ~70,000 queries the server
+			// will drop the connection with an error
+				
+			$this->pdo = null;
+		}
+	
+		if ( $split === false )
+		{
+			$xml_doc->save($xml_field);			
 		}
 	}
 	
@@ -571,7 +678,7 @@ class Sierra
 		if ($record_type=='bib') $join_table = "bib_record";
 		elseif ($record_type=='authority') $join_table = "authority_record";
 		elseif ($record_type=='item') $join_table = "item_record";
-		
+		elseif ($record_type=='eresource') $join_table = "resource_record";
 		
 		$record_type_code = substr($record_type,0,1);
 		
@@ -583,8 +690,8 @@ class Sierra
 				sierra_view.record_metadata,
 				sierra_view.{$join_table}
 			WHERE
-				record_metadata.record_type_code = ' AND
-				record_metadata.campus_code = '{$record_type_code}' AND
+				record_metadata.record_type_code = '{$record_type_code}' AND
+				record_metadata.campus_code = '' AND
 				record_metadata.deletion_date_gmt IS NULL AND
 				sierra_view.record_metadata.id = sierra_view.{$join_table}.id
 			ORDER BY
@@ -613,7 +720,7 @@ class Sierra
 		{
 			$sql .= " LIMIT $limit, $offset";
 		}		
-		
+		echo "Running sql query $sql\n";
 		return $this->getResults($sql);
 	}	
 
@@ -889,5 +996,110 @@ class Sierra
 		return $record;
 	}
 	
-
+	/**
+	 * Fetch an individual record
+	 * @param xml object
+	 * @param string $id
+	 * @return XML object |null
+	 */
+	
+	public function getEresourceRecord($xml_obj,$xml_root,$id)
+	{
+		$id = substr($id,0,7);  //just in case we get some full record numbers..
+		// eresource record query		
+		$sql = trim("
+				SELECT
+				r.id,
+				r.record_num,				
+				r.resource_status_code,				
+				r.access_provider_code,
+				r.publisher_code,
+				varfield.varfield_type_code,
+				varfield.field_content,varfield.occ_num FROM 
+				sierra_view.resource_view as r 
+				LEFT JOIN sierra_view.varfield 
+				ON varfield.record_id=r.id 
+				WHERE r.record_num='$id' 
+				ORDER BY varfield.varfield_type_code,occ_num				
+				");
+		//example record_num=1000333
+		
+		$results = $this->getResults($sql);
+	
+		if ( count($results) == 0 )
+		{
+			return null;
+		}	
+		//append to the xml document
+		$record = $xml_obj->createElement('eresource');
+		$xml_root->appendChild($record);
+		
+		$result = $results[0];
+	
+		$internal_id = $result[0]; // internal postgres id
+		
+		//TODO: figure out how to write deleted XML record
+// 		if ($result['suppress_code'] == 'n'){
+// 			//suppressed item - let's delete it from the discovery tool data.
+// 			$record = $this->createDeletedRecord($id);
+// 			return $record;
+// 		}
+		//check for license information for authorized users using the internal id in checkin record holdings
+		$license_sql = trim("SELECT field_content FROM
+		sierra_view.varfield_view LEFT JOIN sierra_view.license_view 
+		ON (license_view.record_num=varfield_view.record_num and varfield_view.record_type_code='l') 
+		LEFT JOIN sierra_view.resource_record_license_record_link as rl 
+		ON rl.license_record_id=license_view.id
+		WHERE rl.resource_record_id='$internal_id' and varfield_type_code='u'");
+		$l_result = $this->getResults($license_sql);
+		if (count($l_result)==1)
+		{ //access information to add
+			$access_level = $l_result[0][0];
+		}
+		else $access_level = null;
+		//write the information to the xml file
+		//add all the child nodes
+		
+		$record_id = $xml_obj->createElement('record_id'); 
+		$record_id=$record->appendChild($record_id);		
+		$record_id->appendChild($xml_obj->createTextNode($id));
+		
+		foreach ($results as $result){
+			$item = null;
+			switch ($result['varfield_type_code']) {
+				case 'f': //public note
+						$item = $xml_obj->createElement('note');
+						break;
+				case 'j': //description
+						$item = $xml_obj->createElement('description');
+						break;
+				case 'p': //resource_id
+						$item = $xml_obj->createElement('resource_id');
+						break;
+				case 'q': //subject
+						$item = $xml_obj->createElement('subject');
+						break;
+				case 't': //title
+						$item = $xml_obj->createElement('title');
+						break;
+				case 'x': //alternate name/title
+						$item = $xml_obj->createElement('alternate_name');
+						break;
+				case 'y': //resource url
+						$item = $xml_obj->createElement('resource_url');
+						break;				
+			}			
+			if (isset($item)) {
+				$record->appendChild($item);
+				$item->appendChild($xml_obj->createTextNode($result['field_content']));
+			}
+		}
+		//add the license information
+		if (isset($access_level)){
+			$access = $xml_obj->createElement('access_level');
+			$record->appendChild($access);
+			$access->appendChild($xml_obj->createTextNode($access_level));
+		}
+		return $xml_obj;
+	}
 }
