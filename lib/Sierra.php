@@ -86,7 +86,7 @@ class Sierra
 		
 		// make 'em
 		if ($output_format=='xml') $this->createXMLRecords($location, $record_type.'_modified'.gmdate("Y-m-d",$timestamp), $results, true);
-		else $this->createRecords($location, $record_type.'_modified'.gmdate("Y-m-d",$timestamp), $results,true);
+		else $this->createRecords($location, $record_type.'_modified'.gmdate("Y-m-d",$timestamp),$record_type, $results,true);
 	}
 
 	/**
@@ -109,7 +109,7 @@ class Sierra
 		// make 'em
 	
 		if ($output_format =='xml') $this->createXMLRecords($location, $record_type.'_deleted'.gmdate("Y-m-d",$timestamp), $results, true);
-		else $this->createRecords($location, $record_type.'_deleted'.gmdate("Y-m-d",$timestamp), $results, true);
+		else $this->createRecords($location, $record_type.'_deleted'.gmdate("Y-m-d",$timestamp), $record_type, $results, true);
 	}	
 	
 	/**
@@ -1015,7 +1015,8 @@ class Sierra
 				r.access_provider_code,
 				r.publisher_code,
 				varfield.varfield_type_code,
-				varfield.field_content,varfield.occ_num FROM 
+				trim(varfield.field_content) as field_content,
+				varfield.occ_num FROM 
 				sierra_view.resource_view as r 
 				LEFT JOIN sierra_view.varfield 
 				ON varfield.record_id=r.id 
