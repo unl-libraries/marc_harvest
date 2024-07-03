@@ -15,4 +15,4 @@ You can then use some further stylesheet transformations to turn them into add d
 
 Please visit https://github.com/dswalker/shrew for more on the original Shrew setup.
 
-
+This project is no longer in use and no longer updated since moving to Alma.
